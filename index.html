@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>血圧手帳 ✦ Blood Pressure Diary</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Tesseract.js (ブラウザ完結型 超高精度OCR) CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --card-bg-light: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --accent-morning: #f59e0b;
+      --accent-night: #818cf8;
+      --danger: #ef4444;
+      --warning: #facc15;
+      --success: #10b981;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    /* ヘッダー */
+    header {
+      background-color: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .view {
+      display: none;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* トップ画面 */
+    .home-card {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+
+    .home-card .label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .home-card .latest-val {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--primary);
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .home-card .latest-unit {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .home-card .sub-info {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-warning { background: rgba(250, 204, 21, 0.2); color: #fde047; }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    /* メイン2大ボタン */
+    .main-nav-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .btn-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background-color: var(--card-bg);
+      color: var(--text-main);
+      cursor: pointer;
+      font-size: 1.15rem;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      transition: all 0.15s ease;
+    }
+
+    .btn-main:active {
+      transform: scale(0.98);
+      background-color: var(--card-bg-light);
+    }
+
+    .btn-main .btn-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn-main .icon-circle {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+    }
+
+    .btn-record .icon-circle {
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--primary);
+    }
+
+    .btn-visualize .icon-circle {
+      background: rgba(129, 140, 248, 0.2);
+      color: var(--accent-night);
+    }
+
+    /* フォーム (記録画面) */
+    .btn-back {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      cursor: pointer;
+      margin-bottom: 16px;
+      padding: 4px 0;
+    }
+
+    /* 📷 OCRカメラ撮影カード */
+    .ocr-banner {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(129, 140, 248, 0.15));
+      border: 1.5px dashed var(--primary);
+      border-radius: 16px;
+      padding: 18px 16px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .ocr-banner:active {
+      transform: scale(0.98);
+      background: rgba(56, 189, 248, 0.25);
+    }
+
+    .ocr-banner .ocr-icon {
+      font-size: 2rem;
+      margin-bottom: 6px;
+    }
+
+    .ocr-banner .ocr-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .ocr-banner .ocr-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* OCRローディング表示 */
+    #ocr-loading {
+      display: none;
+      margin: 14px 0;
+      padding: 14px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background-color: var(--card-bg-light);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin: 10px 0 6px 0;
+    }
+
+    #ocr-progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--accent-night));
+      transition: width 0.2s ease;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .input-field {
+      width: 100%;
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      color: var(--text-main);
+      font-size: 1.15rem;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-field:focus {
+      border-color: var(--primary);
+    }
+
+    .toggle-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .toggle-btn {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background-color: var(--card-bg);
+      color: var(--text-muted);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.active.morning {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--accent-morning);
+      color: #fbbf24;
+    }
+
+    .toggle-btn.active.night {
+      background: rgba(129, 140, 248, 0.2);
+      border-color: var(--accent-night);
+      color: #a5b4fc;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary), #0284c7);
+      border: none;
+      color: #ffffff;
+      padding: 16px;
+      border-radius: 14px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.35);
+      transition: transform 0.1s;
+    }
+
+    .btn-submit:active {
+      transform: scale(0.98);
+    }
+
+    /* 可視化画面 (コンパクト設計) */
+    .filter-pills {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .pill-btn {
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background-color: var(--card-bg);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .pill-btn.active {
+      background-color: var(--primary);
+      border-color: var(--primary);
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .chart-container {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 16px;
+      position: relative;
+      height: 230px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .summary-card .s-title {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .summary-card .s-val {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .summary-card .s-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .history-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .history-header h3 {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+    .h-date {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .h-type {
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .h-type.morning { color: #fbbf24; }
+    .h-type.night { color: #a5b4fc; }
+
+    .h-values {
+      text-align: right;
+    }
+
+    .h-bp {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .h-pulse {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .btn-delete {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 6px;
+      font-size: 0.9rem;
+      margin-left: 8px;
+    }
+
+    .btn-delete:hover {
+      color: var(--danger);
+    }
+
+    /* トースト通知 */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background-color: rgba(16, 185, 129, 0.95);
+      backdrop-filter: blur(8px);
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 9999px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* バックアップモーダル */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 380px;
+      padding: 20px;
+    }
+
+    .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+    .modal-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background-color: var(--card-bg-light);
+      color: var(--text-main);
+      font-weight: 600;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header>
+    <h1>❤️ 血圧手帳</h1>
+    <button class="btn-icon" onclick="openBackupModal()" title="バックアップ・設定">⚙️</button>
+  </header>
+
+  <div class="container">
+
+    <!-- ============================================== -->
+    <!-- 1. トップ画面 (ホーム) -->
+    <!-- ============================================== -->
+    <div id="view-home" class="view active">
+      
+      <!-- 最新状態サマリーカード -->
+      <div class="home-card">
+        <div class="label">最新の測定結果</div>
+        <div class="latest-val">
+          <span id="home-bp-val">--- / ---</span>
+          <span class="latest-unit">mmHg</span>
+        </div>
+        <div class="sub-info">
+          <span id="home-time-info">未測定</span>
+          <span id="home-pulse-info">脈拍: -- bpm</span>
+        </div>
+        <div id="home-badge-container">
+          <span class="badge badge-success" id="home-badge">データなし</span>
+        </div>
+      </div>
+
+      <!-- 2大メインボタン -->
+      <div class="main-nav-buttons">
+        <button class="btn-main btn-record" onclick="switchView('view-record')">
+          <div class="btn-left">
+            <div class="icon-circle">📝</div>
+            <div>
+              <div>記録する</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">カメラOCR読取 / 手入力</div>
+            </div>
+          </div>
+          <span>➔</span>
+        </button>
+
+        <button class="btn-main btn-visualize" onclick="switchView('view-visualize')">
+          <div class="btn-left">
+            <div class="icon-circle">📊</div>
+            <div>
+              <div>可視化する</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">推移グラフと平均サマリー</div>
+            </div>
+          </div>
+          <span>➔</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 2. 記録画面 (入力フォーム & OCR) -->
+    <!-- ============================================== -->
+    <div id="view-record" class="view">
+      <button class="btn-back" onclick="switchView('view-home')">← 戻る</button>
+
+      <!-- 📷 カメラ撮影 & OCR バナー -->
+      <div class="ocr-banner" onclick="document.getElementById('ocr-camera-input').click()">
+        <div class="ocr-icon">📷</div>
+        <div class="ocr-title">血圧計を撮影して自動入力</div>
+        <div class="ocr-sub">タニタ・オムロン等の液晶画面をパシャリと撮るだけ！</div>
+      </div>
+      <!-- スマホのカメラ直接起動 / 画像選択 input -->
+      <input type="file" id="ocr-camera-input" accept="image/*" capture="environment" style="display: none;" onchange="processOCR(event)">
+
+      <!-- OCR 解析中アニメーション -->
+      <div id="ocr-loading">
+        <div style="font-size: 0.9rem; font-weight: 600; color: var(--primary);" id="ocr-status-text">血圧計の液晶を解析中...</div>
+        <div class="progress-bar-container">
+          <div id="ocr-progress-bar"></div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">上・下・脈拍の数字を検出しています</div>
+      </div>
+      
+      <form id="bp-form" onsubmit="saveRecord(event)">
+        <!-- 1. 測定日 -->
+        <div class="form-group">
+          <label class="form-label">測定日</label>
+          <input type="date" id="input-date" class="input-field" required>
+        </div>
+
+        <!-- 2. 測定時間帯 -->
+        <div class="form-group">
+          <label class="form-label">測定時間帯</label>
+          <div class="toggle-group">
+            <button type="button" class="toggle-btn active morning" id="btn-morning" onclick="setTimeOfDay('朝')">☀️ 朝</button>
+            <button type="button" class="toggle-btn night" id="btn-night" onclick="setTimeOfDay('夜')">🌙 夜</button>
+          </div>
+        </div>
+
+        <!-- 3. 上の血圧 -->
+        <div class="form-group">
+          <label class="form-label">上の血圧 (最高血圧) [mmHg]</label>
+          <input type="number" id="input-sys" class="input-field" placeholder="例: 120" inputmode="numeric" pattern="[0-9]*" min="50" max="250" required>
+        </div>
+
+        <!-- 4. 下の血圧 -->
+        <div class="form-group">
+          <label class="form-label">下の血圧 (最低血圧) [mmHg]</label>
+          <input type="number" id="input-dia" class="input-field" placeholder="例: 80" inputmode="numeric" pattern="[0-9]*" min="30" max="180" required>
+        </div>
+
+        <!-- 5. 脈拍数 -->
+        <div class="form-group">
+          <label class="form-label">脈拍数 [bpm]</label>
+          <input type="number" id="input-pulse" class="input-field" placeholder="例: 72" inputmode="numeric" pattern="[0-9]*" min="30" max="200" required>
+        </div>
+
+        <button type="submit" class="btn-submit">登録する ❤️</button>
+      </form>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 3. 可視化画面 (スマホ向けコンパクト) -->
+    <!-- ============================================== -->
+    <div id="view-visualize" class="view">
+      <button class="btn-back" onclick="switchView('view-home')">← 戻る</button>
+
+      <!-- フィルターピル -->
+      <div class="filter-pills">
+        <button class="pill-btn active" onclick="setChartFilter('all', this)">朝・夜すべて</button>
+        <button class="pill-btn" onclick="setChartFilter('morning', this)">☀️ 朝のみ</button>
+        <button class="pill-btn" onclick="setChartFilter('night', this)">🌙 夜のみ</button>
+      </div>
+
+      <!-- コンパクト推移グラフ -->
+      <div class="chart-container">
+        <canvas id="bpChart"></canvas>
+      </div>
+
+      <!-- 朝・夜の平均サマリー -->
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="s-title">☀️ 朝の平均 (直近)</div>
+          <div class="s-val" id="avg-morning">--- / ---</div>
+          <div class="s-sub" id="avg-morning-pulse">脈拍: -- bpm</div>
+        </div>
+        <div class="summary-card">
+          <div class="s-title">🌙 夜の平均 (直近)</div>
+          <div class="s-val" id="avg-night">--- / ---</div>
+          <div class="s-sub" id="avg-night-pulse">脈拍: -- bpm</div>
+        </div>
+      </div>
+
+      <!-- コンパクト履歴リスト -->
+      <div class="history-card">
+        <div class="history-header">
+          <h3>📋 最近の履歴</h3>
+          <span style="font-size: 0.75rem; color: var(--text-muted);" id="history-count">0 件</span>
+        </div>
+        <div id="history-list">
+          <!-- JSで動的生成 -->
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast">登録完了しました！</div>
+
+  <!-- 設定・バックアップモーダル -->
+  <div class="modal-overlay" id="backupModal">
+    <div class="modal-card">
+      <div class="modal-title">⚙️ データバックアップ</div>
+      <button class="modal-btn" onclick="exportCSV()">📥 CSVファイルで書き出し</button>
+      <button class="modal-btn" onclick="document.getElementById('importFile').click()">📤 CSVファイルから復元</button>
+      <input type="file" id="importFile" accept=".csv" style="display: none;" onchange="importCSV(event)">
+      <button class="modal-btn" style="background: none; color: var(--text-muted); margin-top: 10px;" onclick="closeBackupModal()">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- JavaScript ロジック -->
+  <!-- ============================================== -->
+  <script>
+    const STORAGE_KEY = 'blood_pressure_records_v1';
+    let records = [];
+    let selectedTimeOfDay = '朝';
+    let currentFilter = 'all';
+    let chartInstance = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadRecords();
+      resetFormDate();
+      updateHomeSummary();
+    });
+
+    function switchView(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(viewId).classList.add('view', 'active');
+      window.scrollTo(0, 0);
+
+      if (viewId === 'view-visualize') {
+        renderChart();
+        updateSummaries();
+        renderHistoryList();
+      } else if (viewId === 'view-home') {
+        updateHomeSummary();
+      }
+    }
+
+    function setTimeOfDay(val) {
+      selectedTimeOfDay = val;
+      const btnM = document.getElementById('btn-morning');
+      const btnN = document.getElementById('btn-night');
+      if (val === '朝') {
+        btnM.classList.add('active', 'morning');
+        btnN.classList.remove('active', 'night');
+      } else {
+        btnN.classList.add('active', 'night');
+        btnM.classList.remove('active', 'morning');
+      }
+    }
+
+    function resetFormDate() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('input-date').value = today;
+      const hour = new Date().getHours();
+      setTimeOfDay(hour >= 4 && hour < 16 ? '朝' : '夜');
+    }
+
+    function loadRecords() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      records = data ? JSON.parse(data) : [];
+      records.sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    function saveRecord(e) {
+      e.preventDefault();
+      const date = document.getElementById('input-date').value;
+      const sys = parseInt(document.getElementById('input-sys').value, 10);
+      const dia = parseInt(document.getElementById('input-dia').value, 10);
+      const pulse = parseInt(document.getElementById('input-pulse').value, 10);
+
+      if (isNaN(sys) || isNaN(dia) || isNaN(pulse)) return;
+
+      const newRecord = {
+        id: 'bp_' + Date.now(),
+        date: date,
+        timeOfDay: selectedTimeOfDay,
+        sys: sys,
+        dia: dia,
+        pulse: pulse,
+        timestamp: Date.now()
+      };
+
+      records.unshift(newRecord);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+
+      document.getElementById('input-sys').value = '';
+      document.getElementById('input-dia').value = '';
+      document.getElementById('input-pulse').value = '';
+
+      showToast('登録完了しましたえ ❤️');
+      setTimeout(() => switchView('view-home'), 500);
+    }
+
+    function deleteRecord(id) {
+      if (!confirm('この測定記録を削除してもよろしおすか？')) return;
+      records = records.filter(r => r.id !== id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      renderChart();
+      updateSummaries();
+      renderHistoryList();
+      showToast('削除しました');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function getBPStatus(sys, dia) {
+      if (sys < 115 && dia < 75) return { text: '至適血圧', class: 'badge-success' };
+      if (sys < 125 && dia < 80) return { text: '正常血圧', class: 'badge-success' };
+      if (sys < 135 && dia < 85) return { text: '正常高値', class: 'badge-warning' };
+      if (sys < 145 || dia < 90) return { text: 'Ⅰ度高血圧', class: 'badge-danger' };
+      if (sys < 160 || dia < 100) return { text: 'Ⅱ度高血圧', class: 'badge-danger' };
+      return { text: 'Ⅲ度高血圧 (要安静)', class: 'badge-danger' };
+    }
+
+    function updateHomeSummary() {
+      if (records.length === 0) {
+        document.getElementById('home-bp-val').textContent = '--- / ---';
+        document.getElementById('home-time-info').textContent = '未測定';
+        document.getElementById('home-pulse-info').textContent = '脈拍: -- bpm';
+        document.getElementById('home-badge').textContent = 'データなし';
+        document.getElementById('home-badge').className = 'badge badge-warning';
+        return;
+      }
+      const latest = records[0];
+      document.getElementById('home-bp-val').textContent = `${latest.sys} / ${latest.dia}`;
+      document.getElementById('home-time-info').textContent = `${latest.date} (${latest.timeOfDay})`;
+      document.getElementById('home-pulse-info').textContent = `脈拍: ${latest.pulse} bpm`;
+
+      const status = getBPStatus(latest.sys, latest.dia);
+      const badge = document.getElementById('home-badge');
+      badge.textContent = status.text;
+      badge.className = `badge ${status.class}`;
+    }
+
+    // ==============================================
+    // 📷 TANITA BP-E11 & 一般血圧計 特化型 高精度OCR
+    // ==============================================
+    async function processOCR(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const loadingBox = document.getElementById('ocr-loading');
+      const progressBar = document.getElementById('ocr-progress-bar');
+      const statusText = document.getElementById('ocr-status-text');
+
+      loadingBox.style.display = 'block';
+      progressBar.style.width = '10%';
+      statusText.textContent = '血圧計の画像を準備中...';
+
+      try {
+        // 画像の前処理: 7セグメント液晶認識用のCanvas二値化
+        const processedImage = await preprocessImageForLCD(file);
+        progressBar.style.width = '35%';
+        statusText.textContent = '文字認識エンジン起動中...';
+
+        const worker = await Tesseract.createWorker('eng');
+        await worker.setParameters({
+          tessedit_char_whitelist: '0123456789AMP:.- ', // 数字と時刻記号のみに絞り込んで誤認防止
+        });
+
+        progressBar.style.width = '65%';
+        statusText.textContent = '血圧の数値を解析中...';
+
+        const ret = await worker.recognize(processedImage);
+        await worker.terminate();
+
+        progressBar.style.width = '95%';
+        statusText.textContent = '数値を自動仕分け中...';
+
+        // 抽出されたテキストから血圧・脈拍をパース
+        parseBloodPressureValues(ret.data.text);
+
+        progressBar.style.width = '100%';
+        showToast('数値を自動入力しましたえ ❤️');
+      } catch (err) {
+        alert('画像の解析に失敗しました。もう一度ピントを合わせて撮影してください:\n' + err);
+      } finally {
+        setTimeout(() => {
+          loadingBox.style.display = 'none';
+          progressBar.style.width = '0%';
+        }, 500);
+        event.target.value = ''; // リセット
+      }
+    }
+
+    // 画像前処理: コントラスト・グレースケール強調
+    function preprocessImageForLCD(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // 適切な解像度にスケーリング
+          const maxDim = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+            else { w = Math.round((w * maxDim) / h); h = maxDim; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+
+          ctx.drawImage(img, 0, 0, w, h);
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const d = imgData.data;
+
+          // ハイコントラスト化 & グレースケール
+          for (let i = 0; i < d.length; i += 4) {
+            const gray = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+            // 7セグメントの黒をくっきり浮き立たせるガンマ調整
+            const adjusted = gray < 130 ? Math.max(0, gray * 0.5) : Math.min(255, gray * 1.3);
+            d[i] = adjusted;
+            d[i + 1] = adjusted;
+            d[i + 2] = adjusted;
+          }
+          ctx.putImageData(imgData, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    // 抽出されたテキストから TANITA 液晶の [上(179), 下(140), 脈拍(74)] をパース
+    function parseBloodPressureValues(rawText) {
+      console.log('OCR Raw Text:', rawText);
+      
+      // 連続する数字（2桁〜3桁）をすべて抽出
+      const matches = rawText.match(/\b\d{2,3}\b/g);
+      if (!matches || matches.length < 2) {
+        alert('血圧の数字がうまく読み取れませんでした。画面に近づけて明るい場所で再撮影してください。\n検出テキスト: ' + rawText);
+        return;
+      }
+
+      // 検出された候補数字（整数変換）
+      const candidates = matches.map(n => parseInt(n, 10)).filter(n => n >= 35 && n <= 250);
+
+      // 上段(SYS)、中段(DIA)、下段(PULSE)の抽出
+      let sys = null;
+      let dia = null;
+      let pulse = null;
+
+      // TANITA BP-E11 などの縦並び液晶：上から順に出現することが多い
+      // 候補の中から血圧の妥当な範囲をチェック
+      const sysCandidates = candidates.filter(n => n >= 90 && n <= 240);
+      const diaCandidates = candidates.filter(n => n >= 45 && n <= 150);
+      const pulseCandidates = candidates.filter(n => n >= 40 && n <= 140);
+
+      if (sysCandidates.length > 0) {
+        // 最も大きいか最初に出現した高数値を最高血圧に
+        sys = sysCandidates[0];
+      }
+
+      if (diaCandidates.length > 0) {
+        // sys よりも小さく、dia として妥当な数値を最低血圧に
+        const validDia = diaCandidates.filter(n => sys === null || n < sys);
+        if (validDia.length > 0) {
+          dia = validDia[0];
+        }
+      }
+
+      if (pulseCandidates.length > 0) {
+        // sys と dia 以外の候補を脈拍に採用
+        const validPulse = pulseCandidates.filter(n => n !== sys && n !== dia);
+        if (validPulse.length > 0) {
+          pulse = validPulse[validPulse.length - 1]; // 下部に出る数値を採用
+        }
+      }
+
+      // 入力フォームへ自動セット
+      if (sys !== null) document.getElementById('input-sys').value = sys;
+      if (dia !== null) document.getElementById('input-dia').value = dia;
+      if (pulse !== null) document.getElementById('input-pulse').value = pulse;
+
+      // 「PM」などの文字が含まれていたら自動で「夜」にセット
+      if (rawText.includes('PM') || rawText.includes('pm')) {
+        setTimeOfDay('夜');
+      } else if (rawText.includes('AM') || rawText.includes('am')) {
+        setTimeOfDay('朝');
+      }
+    }
+
+    // チャート
+    function setChartFilter(filter, btn) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-pills .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderChart();
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('bpChart').getContext('2d');
+      let filtered = [...records];
+      if (currentFilter === 'morning') {
+        filtered = filtered.filter(r => r.timeOfDay === '朝');
+      } else if (currentFilter === 'night') {
+        filtered = filtered.filter(r => r.timeOfDay === '夜');
+      }
+      filtered = filtered.slice(0, 20).reverse();
+
+      const labels = filtered.map(r => {
+        const parts = r.date.split('-');
+        return `${parts[1]}/${parts[2]} ${r.timeOfDay === '朝' ? '☀️' : '🌙'}`;
+      });
+      const dataSys = filtered.map(r => r.sys);
+      const dataDia = filtered.map(r => r.dia);
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '上 (最高)',
+              data: dataSys,
+              borderColor: '#f43f5e',
+              backgroundColor: 'rgba(244, 63, 94, 0.1)',
+              borderWidth: 2.5,
+              pointRadius: 3.5,
+              pointBackgroundColor: '#f43f5e',
+              tension: 0.3
+            },
+            {
+              label: '下 (最低)',
+              data: dataDia,
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              borderWidth: 2.5,
+              pointRadius: 3.5,
+              pointBackgroundColor: '#38bdf8',
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10 } }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 45 },
+              grid: { color: 'rgba(255,255,255,0.05)' }
+            },
+            y: {
+              min: 50,
+              max: 200,
+              ticks: { color: '#64748b', font: { size: 9 }, stepSize: 20 },
+              grid: { color: 'rgba(255,255,255,0.05)' }
+            }
+          }
+        }
+      });
+    }
+
+    function updateSummaries() {
+      const mornings = records.filter(r => r.timeOfDay === '朝').slice(0, 14);
+      const nights = records.filter(r => r.timeOfDay === '夜').slice(0, 14);
+
+      if (mornings.length > 0) {
+        const avgSys = Math.round(mornings.reduce((s, r) => s + r.sys, 0) / mornings.length);
+        const avgDia = Math.round(mornings.reduce((s, r) => s + r.dia, 0) / mornings.length);
+        const avgPulse = Math.round(mornings.reduce((s, r) => s + r.pulse, 0) / mornings.length);
+        document.getElementById('avg-morning').textContent = `${avgSys} / ${avgDia}`;
+        document.getElementById('avg-morning-pulse').textContent = `脈拍: ${avgPulse} bpm`;
+      } else {
+        document.getElementById('avg-morning').textContent = '--- / ---';
+      }
+
+      if (nights.length > 0) {
+        const avgSys = Math.round(nights.reduce((s, r) => s + r.sys, 0) / nights.length);
+        const avgDia = Math.round(nights.reduce((s, r) => s + r.dia, 0) / nights.length);
+        const avgPulse = Math.round(nights.reduce((s, r) => s + r.pulse, 0) / nights.length);
+        document.getElementById('avg-night').textContent = `${avgSys} / ${avgDia}`;
+        document.getElementById('avg-night-pulse').textContent = `脈拍: ${avgPulse} bpm`;
+      } else {
+        document.getElementById('avg-night').textContent = '--- / ---';
+      }
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('history-list');
+      container.innerHTML = '';
+      document.getElementById('history-count').textContent = `${records.length} 件`;
+
+      if (records.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 0.85rem;">記録がまだありません</div>';
+        return;
+      }
+
+      records.slice(0, 15).forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        const typeClass = r.timeOfDay === '朝' ? 'morning' : 'night';
+        const typeIcon = r.timeOfDay === '朝' ? '☀️' : '🌙';
+
+        item.innerHTML = `
+          <div>
+            <div class="h-type ${typeClass}">${typeIcon} ${r.timeOfDay}</div>
+            <div class="h-date">${r.date}</div>
+          </div>
+          <div style="display: flex; align-items: center;">
+            <div class="h-values">
+              <div class="h-bp">${r.sys} / ${r.dia}</div>
+              <div class="h-pulse">脈拍: ${r.pulse}</div>
+            </div>
+            <button class="btn-delete" onclick="deleteRecord('${r.id}')" title="削除">🗑️</button>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function exportCSV() {
+      if (records.length === 0) {
+        alert('保存されたデータがありません。');
+        return;
+      }
+      let csvContent = 'ID,測定日,時間帯,上の血圧,下の血圧,脈拍数\n';
+      records.forEach(r => {
+        csvContent += `${r.id},${r.date},${r.timeOfDay},${r.sys},${r.dia},${r.pulse}\n`;
+      });
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `血圧記録_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      closeBackupModal();
+    }
+
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const lines = e.target.result.split('\n');
+          let added = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const cols = line.split(',');
+            if (cols.length >= 6) {
+              records.push({
+                id: cols[0] || ('bp_' + Date.now() + i),
+                date: cols[1],
+                timeOfDay: cols[2],
+                sys: parseInt(cols[3], 10),
+                dia: parseInt(cols[4], 10),
+                pulse: parseInt(cols[5], 10),
+                timestamp: Date.now() - (i * 1000)
+              });
+              added++;
+            }
+          }
+          const unique = [];
+          const map = new Map();
+          for (const item of records) {
+            if (!map.has(item.id)) {
+              map.set(item.id, true);
+              unique.push(item);
+            }
+          }
+          records = unique;
+          records.sort((a, b) => b.timestamp - a.timestamp);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+          updateHomeSummary();
+          showToast(`${added}件インポートしました`);
+          closeBackupModal();
+        } catch (err) {
+          alert('インポートに失敗しました。CSVフォーマットを確認してください。');
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function openBackupModal() { document.getElementById('backupModal').classList.add('active'); }
+    function closeBackupModal() { document.getElementById('backupModal').classList.remove('active'); }
+  </script>
+
+</body>
+</html>
